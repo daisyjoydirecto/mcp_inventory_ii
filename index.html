@@ -666,7 +666,7 @@ MCP STOCK-IN SLIP`},WITHDRAWAL:{code:"FW",label:"Fabrication Withdrawal",txType:
       <button class="btn primary" id="btnSdLedger">📒 Open ledger</button>
     </div>
     <div class="card" style="margin-bottom:14px;padding:0;overflow:hidden">
-      <div style="display:flex;align-items:center;padding:10px 14px"><h2 style="margin:0;flex:1">Daily sales — Cash vs Credit / Salary deduct</h2><input type="date" id="chkDay" style="width:auto;margin-right:6px" title="Day to check"><button class="btn sm primary" id="btnChkDay" style="margin-right:6px">🔍 Check day vs Google Sheet</button><button class="btn sm" id="btnDailyCsv">Export CSV</button></div>
+      <div style="display:flex;align-items:center;padding:10px 14px"><h2 style="margin:0;flex:1">Daily sales — Cash vs Credit / Salary deduct</h2><input type="date" id="chkDay" style="width:auto;margin-right:6px" title="Day to check"><button class="btn sm primary" id="btnChkDay" style="margin-right:6px">🔍 Check day vs Google Sheet</button><button class="btn sm" id="btnDailyShare" style="margin-right:6px" title="A link that anyone can open to view and download this table (read-only)">🔗 Share link</button><button class="btn sm" id="btnDailyCsv">Export CSV</button></div>
       <div style="overflow:auto"><table class="daily" id="dailyTable"></table></div>
     </div>
     <div class="card" id="itemCard" style="padding:0;overflow:hidden">
@@ -674,7 +674,7 @@ MCP STOCK-IN SLIP`},WITHDRAWAL:{code:"FW",label:"Fabrication Withdrawal",txType:
         <h2 style="margin:0;flex:1;min-width:260px">Daily purchases per item — Walk-in · Volume · Salary deduct</h2>
         <div class="itdates"><span>📅</span><input type="date" id="itFrom" title="From"><span>to</span><input type="date" id="itTo" title="To"></div>
         <input id="itQ" placeholder="Search item…" style="width:180px">
-        <button class="btn sm" id="itCsv">⬇ Download Excel</button><button class="btn sm primary" id="itPrint">🖨 Print</button>
+        <button class="btn sm" id="itShare" title="A link that anyone can open to view and download this table (read-only)">🔗 Share link</button><button class="btn sm" id="itCsv">⬇ Download Excel</button><button class="btn sm primary" id="itPrint">🖨 Print</button>
       </div>
       <div class="hint" id="itRange" style="padding:0 14px 8px"></div>
       <div style="overflow:auto;max-height:70vh"><table class="daily itemrep" id="itemTable"></table></div>
@@ -723,8 +723,8 @@ MCP STOCK-IN SLIP`},WITHDRAWAL:{code:"FW",label:"Fabrication Withdrawal",txType:
 /* ================= settings ================= */
 /** Share link mode (?sdview=…): shows ONLY the salary deduction ledger, read-only. */
 /*  ?dview=… = Daily sales (Cash vs Credit) only · ?cview=… = Daily cash ledger only */
-const SHARE_KIND = (() => { try { const q = new URLSearchParams(location.search); return q.get('sdview') ? 'sd' : q.get('dview') ? 'daily' : q.get('cview') ? 'cash' : ''; } catch(e){ return ''; } })();
-const SDVIEW = (() => { try { const q = new URLSearchParams(location.search); return q.get('sdview') || q.get('dview') || q.get('cview') || ''; } catch(e){ return ''; } })();
+const SHARE_KIND = (() => { try { const q = new URLSearchParams(location.search); return q.get('sdview') ? 'sd' : q.get('dview') ? 'daily' : q.get('cview') ? 'cash' : q.get('iview') ? 'items' : ''; } catch(e){ return ''; } })();
+const SDVIEW = (() => { try { const q = new URLSearchParams(location.search); return q.get('sdview') || q.get('dview') || q.get('cview') || q.get('iview') || ''; } catch(e){ return ''; } })();
 const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbykZQ6nykPhKxgQ9wX2rLMI3mU2HdwpW-Du6-FsNLc-7NBN47Ud7JU-98_s1af_xPNk/exec';
 const COMPANIES = ['MMEI','MMDC','MMHI','MMHC','MMFI','MGT'];   // employee sub-categories
 const CASH_MODE = 'CASH :  OFFICE CASHIER';
@@ -2237,7 +2237,8 @@ function openSdUpload(){
 const SHARE_INFO = {
   sd:    {param: 'sdview', title: 'the salary deduction ledger', what: 'view, print and download the salary deduction ledger'},
   daily: {param: 'dview',  title: 'Daily sales — Cash vs Credit', what: 'view, print and download the <b>Daily sales — Cash vs Credit / Salary deduct</b> table (totals only — no customer names)'},
-  cash:  {param: 'cview',  title: 'the daily cash ledger', what: 'view and print the <b>daily cash ledger</b> of any day'}
+  cash:  {param: 'cview',  title: 'the daily cash ledger', what: 'view and print the <b>daily cash ledger</b> of any day'},
+  items: {param: 'iview',  title: 'Daily purchases per item', what: 'view, print and download the <b>Daily purchases per item — Walk-in · Volume · Salary deduct</b> table (kilos and amounts per cut — no customer names)'}
 };
 function openSdShare(){ return openShare('sd'); }
 async function openShare(kind, reset){
@@ -2301,6 +2302,30 @@ async function dailyViewBoot(){
   $('vFrom').onchange = manual; $('vTo').onchange = manual;
   $('vCsv').onclick = exportDaily;
   $('vPdf').onclick = () => { const s = settings(); $('printArea').innerHTML = '<div class="slip-page"><div class="ledger dprint"><div class="sh"><img src="' + (s.logo || DEFAULT_LOGO) + '" alt=""><div><b>' + esc(s.company) + '</b>' + esc(s.address) + '</div></div>' + $('vHead').innerHTML + '<table class="daily">' + $('dailyTable').innerHTML + '</table><div class="foot"><span>Sales Meat &amp; Livestock · daily sales (view only)</span><span>Printed ' + new Date().toLocaleString('en-PH') + '</span></div></div></div>'; setTimeout(() => window.print(), 50); };
+  loadRange();
+}
+/** Share link: Daily purchases per item — Walk-in · Volume · Salary deduct (no customer names). */
+async function itemsViewBoot(){
+  const root = viewShell('Daily Purchases per Item');
+  const card = $('itemCard'); root.appendChild(card);
+  const sh = $('itShare'); if (sh) sh.style.display = 'none';
+  const t = todayISO();
+  if (!$('itFrom').value) $('itFrom').value = t;
+  if (!$('itTo').value) $('itTo').value = t;
+  let SEQ = 0;
+  const loadRange = async () => {
+    const r = itemDates(), my = ++SEQ;
+    $('status').textContent = 'View only · loading…'; $('itRange').textContent = 'Loading…';
+    try {
+      const d = await api('getItemsView', r.from, r.to);
+      if (my !== SEQ) return;
+      if (d.config && d.config.categories) CAT = d.config.categories;
+      ROWS = d.rows.map(a => { const o = {_row: a[0]}; d.keys.forEach((k, i) => o[k] = a[i+1]); return enrich(o); });
+      renderItems();
+      $('status').textContent = 'View only · data as of ' + d.at;
+    } catch (e){ if (my === SEQ){ $('itemTable').innerHTML = ''; $('itRange').innerHTML = viewErr(e); $('status').textContent = 'View only'; } }
+  };
+  $('itFrom').onchange = loadRange; $('itTo').onchange = loadRange; $('itQ').oninput = () => renderItems();
   loadRange();
 }
 /** Share link: Daily cash ledger of one day (read-only). */
@@ -3347,7 +3372,7 @@ $('dailyTable').addEventListener('click', e => { const tr = e.target.closest('tr
 $('ledDate').value = todayISO();
 $('btnLedger').onclick = openLedger;
 $('btnSdLedger').onclick = openSdLedger;
-$('btnSdShare').onclick = () => openShare('sd');
+$('btnSdShare').onclick = () => openShare('sd'); $('btnDailyShare').onclick = () => openShare('daily'); $('itShare').onclick = () => openShare('items');
 $('btnSdUpload').onclick = openSdUpload;
 $('btnSettings').onclick = openSettings;
 $('btnTrash').onclick = openTrash;
@@ -3494,7 +3519,7 @@ addLine(); addLine();
 renderLtabs();
 setModes(CAT.walkin); setCustList();
 if (AUTO_REFRESH_MIN) setInterval(() => { if (ONLINE && !$('modalRoot').innerHTML && !LEDIT.dirty && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#tab-entry'))) load(true); }, AUTO_REFRESH_MIN * 60000);
-if (SDVIEW) (SHARE_KIND === 'daily' ? dailyViewBoot : SHARE_KIND === 'cash' ? cashViewBoot : sdViewBoot)();
+if (SDVIEW) (SHARE_KIND === 'daily' ? dailyViewBoot : SHARE_KIND === 'cash' ? cashViewBoot : SHARE_KIND === 'items' ? itemsViewBoot : sdViewBoot)();
 else loadDeviceState().then(showSaved).then(() => load(!!CACHE_AT));
 <\/script>
 <script>
@@ -3503,7 +3528,7 @@ window.addEventListener('resize',h);window.addEventListener('load',h);document.a
 <\/script>
 </body>
 </html>
-`,HC=["sdview","dview","cview"];function Ub(){try{const e=new URLSearchParams(location.search);for(const n of HC)if(e.get(n))return e.get(n)}catch{}return""}const Ql=()=>location.origin+location.pathname;function Ys(e,n,s,{min:r=1}={}){const a=e.split(n).length-1;return a<r&&console.warn(`Sales Entry patch: "${n}" found ${a} times`),e.split(n).join(s)}function $b(){let e=$C;const n=`<script>
+`,HC=["sdview","dview","cview","iview"];function Ub(){try{const e=new URLSearchParams(location.search);for(const n of HC)if(e.get(n))return e.get(n)}catch{}return""}const Ql=()=>location.origin+location.pathname;function Ys(e,n,s,{min:r=1}={}){const a=e.split(n).length-1;return a<r&&console.warn(`Sales Entry patch: "${n}" found ${a} times`),e.split(n).join(s)}function $b(){let e=$C;const n=`<script>
 (function(){
   var host = window.parent && window.parent !== window ? window.parent : window;
   window.__MCP_SE = host.__mcpSalesEnv || {search: '', base: '', apiUrl: ''};
